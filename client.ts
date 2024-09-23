@@ -282,7 +282,11 @@ FileVersion=2.2
 `;
     Deno.writeTextFileSync(this.filename, acmi);
     this.writing = true;
-    console.log(`ACMI file created: ${this.filename}`);
+    console.log(
+      `%cCreated%c: ${this.filename}`,
+      "color: green",
+      "color: white",
+    );
   }
   async stop() {
     this.writing = false;
@@ -291,15 +295,27 @@ FileVersion=2.2
       try {
         const archiveName = this.filename.replace(/txt/g, "zip");
         await compress(this.filename, archiveName);
-        console.log(`ACMI file compressed: ${archiveName}`);
+        console.log(
+          `%cCompressed%c: ${archiveName}`,
+          "color: green",
+          "color: white",
+        );
 
         await Deno.remove(this.filename);
-        console.log(`original ACMI file removed: ${this.filename}`);
+        console.log(
+          `%cRemoved%c: ${this.filename}`,
+          "color: red",
+          "color: white",
+        );
       } catch (e) {
         console.error(e);
       }
     } else {
-      console.warn(`Failed to compress ACMI file: ${this.filename}`);
+      console.warn(
+        `%cFailed to compress ACMI file%c: ${this.filename}`,
+        "color: red",
+        "color: white",
+      );
     }
 
     this.filename = null;
