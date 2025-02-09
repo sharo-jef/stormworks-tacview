@@ -1,4 +1,4 @@
-import { compress } from "https://deno.land/x/zip@v1.2.5/mod.ts";
+import { compress } from 'https://deno.land/x/zip@v1.2.5/mod.ts';
 import {
   AttitudeObject,
   type PageObject,
@@ -9,7 +9,8 @@ import {
   WeaponData,
   type WeaponObject,
   type WeaponType,
-} from "./stormworks.ts";
+} from './stormworks.ts';
+import { SteamRepository } from './steam.ts';
 
 export interface IClient {
   write(data: PageObject): Promise<void>;
@@ -38,6 +39,8 @@ export class Client implements IClient {
   radars: Map<number, number> = new Map();
   stt: Map<number, number> = new Map();
 
+  constructor(protected readonly steamRepository: SteamRepository) {}
+
   // deno-lint-ignore require-await
   async write(data: PageObject): Promise<void> {
     const acmi = this.writeAcmi(data);
@@ -45,13 +48,13 @@ export class Client implements IClient {
   }
 
   protected writeAcmi(data: PageObject): string {
-    let acmi = "";
+    let acmi = '';
 
-    if (data.type === "vehicle") {
+    if (data.type === 'vehicle') {
       const vehicle = data as VehicleObject;
 
       // Vehicle のデータを受信する度に frame を進める
-      if (vehicle.page === "1") {
+      if (vehicle.page === '1') {
         this.frame += 0.1; // 6ticks 毎に vehicle のデータが送られてくる場合: 6ticks / 60ticks (1s) = 0.1s
         acmi += `#${this.frame}\n`;
 
@@ -80,32 +83,33 @@ export class Client implements IClient {
       for (const data of vehicle.data) {
         const tag = data.name.match(/^\[[^\]]*\]/)?.[0].slice(1, -1) || null;
         const color = data.name.match(/\[[^\]]*\]$/)?.[0].slice(1, -1) || null;
-        const name = data.name.replace(/\[[^\]]*\]/g, "").replace(/__/g, " ");
+        const name = data.name.replace(/\[[^\]]*\]/g, '').replace(/__/g, ' ');
 
         const internalType = tag
           ? tag
           : data.seat_count === 0 && data.z >= 0
-          ? "Missile"
+          ? 'Missile'
           : data.seat_count === 0
-          ? "Torpedo"
+          ? 'Torpedo'
           : data.seat_count === 1 || data.z > 20
-          ? "Aircraft"
-          : "Sea";
-        const type = internalType === "Aircraft"
-          ? "Air+FixedWing"
-          : internalType === "Missile"
-          ? "Weapon+Missile"
-          : internalType === "Torpedo"
-          ? "Weapon+Torpedo"
-          : internalType === "AntiAircraft"
-          ? "Ground+AntiAircraft+SAM"
-          : "Sea+Watercraft";
+          ? 'Aircraft'
+          : 'Sea';
+        const type = internalType.toUpperCase() === 'AIRCRAFT'
+          ? 'Air+FixedWing'
+          : internalType.toUpperCase() === 'MISSILE'
+          ? 'Weapon+Missile'
+          : internalType.toUpperCase() === 'TORPEDO'
+          ? 'Weapon+Torpedo'
+          : internalType.toUpperCase() === 'ANTIAIRCRAFT'
+          ? 'Ground+AntiAircraft+SAM'
+          : 'Sea+Watercraft';
 
         const parent = this.getParentData(vehicle.data, data.p_id);
         const parentObj = this.vehicles.get(data.p_id);
 
         if (!parent) {
           // 親が存在しない場合は無視 (自分が親の場合も自分が返るはずなので、基本的にはこの処理は実行されない想定)
+          console.warn(`Parent not found: ${data.id}`);
           continue;
         }
 
@@ -116,19 +120,28 @@ export class Client implements IClient {
           this.vehicles.set(data.id, {
             ...data,
             frame: this.frame,
-            color: color || parentObj?.color || "Red",
+            color: color || parentObj?.color || 'Red',
           });
 
+          const acmiName = name ||
+            (type === 'Air+FixedWing'
+              ? 'F-16CM'
+              : type === 'Sea+Watercraft'
+              ? `${internalType} #${data.id}`
+              : `${internalType} #${data.id}`);
           acmi += `${data.id},T=${data.x * 0.000009090909090909091}|${
             data.y * 0.000009090909090909091
-          }|${data.z}||||||,Type=${type},Name=${
-            name ||
-            (type === "Air+FixedWing"
-              ? "F-16CM"
-              : type === "Sea+Watercraft"
-              ? `${internalType} #${data.id}`
-              : `${internalType} #${data.id}`)
-          },Color=${this.vehicles.get(data.id)?.color || "Red"}\n`;
+          }|${data.z}||||||,Type=${type},Name=${acmiName},Color=${
+            this.vehicles.get(data.id)?.color || 'Red'
+          },FullName=${
+            acmiName + (data.plist.stmid
+              ? ` (${
+                this.steamRepository.getPersonaname(
+                  data.plist.stmid,
+                )
+              })`
+              : '')
+          }\n`;
         }
         if (data.dmg >= 9999) {
           acmi += `-${data.id}\n`;
@@ -141,7 +154,7 @@ export class Client implements IClient {
           this.vehicles.delete(id);
         }
       });
-    } else if (data.type === "weapon") {
+    } else if (data.type === 'weapon') {
       const weapon = data as WeaponObject;
       this.bullets.set(Math.floor(Math.random() * 100000 + 100000), {
         x: weapon.data.cx,
@@ -161,7 +174,7 @@ export class Client implements IClient {
         weaponType: weapon.data.wType,
         frame: this.frame,
       });
-    } else if (data.type === "radar") {
+    } else if (data.type === 'radar') {
       const radar = data as RadarObject;
       let minSqrDistance = 400;
       let minId = -1;
@@ -181,7 +194,7 @@ export class Client implements IClient {
         },RadarRange=4000,RadarHorizontalBeamwidth=10,RadarVerticalBeamwidth=10\n`;
         this.radars.set(minId, this.frame);
       }
-    } else if (data.type === "attitude") {
+    } else if (data.type === 'attitude') {
       const attitude = data as AttitudeObject;
       let minSqrDistance = 400;
       let minId = -1;
@@ -198,7 +211,7 @@ export class Client implements IClient {
           attitude.data.pitch / Math.PI * 180
         }|${attitude.data.yaw / Math.PI * 180}|||\n`;
       }
-    } else if (data.type === "radar_stt") {
+    } else if (data.type === 'radar_stt') {
       const stt = data as RadarSttObject;
       let minSqrDistance = 400;
       let minId = -1;
@@ -227,7 +240,7 @@ export class Client implements IClient {
     data: VehicleObjectData[],
     parentId: number,
   ): VehicleObjectData | undefined {
-    return data.find((v) => v.id === parentId);
+    return data.find((v) => v.id === parentId) || this.vehicles.get(parentId);
   }
 
   tick() {
@@ -254,18 +267,21 @@ export class Client implements IClient {
 export class AcmiClient extends Client {
   filename: string | null = null;
   writing: boolean = false;
-  init(): void {
+  async init(): Promise<void> {
+    if (this.writing) {
+      await this.stop();
+    }
     this.vehicles = new Map();
     this.bullets = new Map();
     this.radars = new Map();
     this.stt = new Map();
     const now = new Date();
-    this.filename = `Stormworks-${`${now.getFullYear()}`.padStart(4, "0")}${
-      `${now.getMonth() + 1}`.padStart(2, "0")
-    }${`${now.getDate()}`.padStart(2, "0")}-${
-      `${now.getHours()}`.padStart(2, "0")
-    }${`${now.getMinutes()}`.padStart(2, "0")}${
-      `${now.getSeconds()}`.padStart(2, "0")
+    this.filename = `Stormworks-${`${now.getFullYear()}`.padStart(4, '0')}${
+      `${now.getMonth() + 1}`.padStart(2, '0')
+    }${`${now.getDate()}`.padStart(2, '0')}-${
+      `${now.getHours()}`.padStart(2, '0')
+    }${`${now.getMinutes()}`.padStart(2, '0')}${
+      `${now.getSeconds()}`.padStart(2, '0')
     }.txt.acmi`;
     this.frame = 0;
     const acmi = `FileType=text/acmi/tacview
@@ -284,8 +300,8 @@ FileVersion=2.2
     this.writing = true;
     console.log(
       `%cCreated%c: ${this.filename}`,
-      "color: green",
-      "color: white",
+      'color: green',
+      'color: white',
     );
   }
   async stop() {
@@ -293,19 +309,19 @@ FileVersion=2.2
 
     if (this.filename) {
       try {
-        const archiveName = this.filename.replace(/txt/g, "zip");
+        const archiveName = this.filename.replace(/txt/g, 'zip');
         await compress(this.filename, archiveName);
         console.log(
           `%cCompressed%c: ${archiveName}`,
-          "color: green",
-          "color: white",
+          'color: green',
+          'color: white',
         );
 
         await Deno.remove(this.filename);
         console.log(
           `%cRemoved%c: ${this.filename}`,
-          "color: red",
-          "color: white",
+          'color: red',
+          'color: white',
         );
       } catch (e) {
         console.error(e);
@@ -313,8 +329,8 @@ FileVersion=2.2
     } else {
       console.warn(
         `%cFailed to compress ACMI file%c: ${this.filename}`,
-        "color: red",
-        "color: white",
+        'color: red',
+        'color: white',
       );
     }
 
@@ -330,8 +346,11 @@ FileVersion=2.2
 
 export class RealtimeTelemetryClient extends Client {
   closed = false;
-  constructor(private readonly conn: Deno.Conn) {
-    super();
+  constructor(
+    private readonly conn: Deno.Conn,
+    steamRepository: SteamRepository,
+  ) {
+    super(steamRepository);
   }
   async write(data: PageObject): Promise<void> {
     if (this.closed) {
@@ -342,7 +361,11 @@ export class RealtimeTelemetryClient extends Client {
       await this.conn.write(new TextEncoder().encode(acmi));
     } catch (err) {
       this.closed = true;
-      console.error("Connection error:", err);
+      if (err instanceof Deno.errors.ConnectionAborted) {
+        console.log('Connection closed by client');
+      } else {
+        console.error('Unexpected error:', err);
+      }
       this.conn.close();
     }
   }
@@ -356,7 +379,7 @@ export class RealtimeTelemetryClient extends Client {
       const buf = new Uint8Array(1024);
       await this.conn.read(buf);
       const clientHandshake = new TextDecoder().decode(buf);
-      console.log("Client handshake:", clientHandshake);
+      console.log(clientHandshake);
 
       const header = `FileType=text/acmi/tacview
 FileVersion=2.2
@@ -375,7 +398,7 @@ FileVersion=2.2
       await this.conn.write(new TextEncoder().encode(header));
     } catch (err) {
       this.closed = true;
-      console.error("Connection error:", err);
+      console.error('Unexpected error:', err);
       this.conn.close();
     }
   }

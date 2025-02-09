@@ -15,6 +15,14 @@
 deno compile -A index.ts
 ```
 
+## Run
+
+You have to set `STEAM_API_KEY` environment variable. (`.env` file is available)
+
+```bash
+deno run -A index.ts
+```
+
 ## Usage
 
 ### ACMI
