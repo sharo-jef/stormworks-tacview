@@ -205,7 +205,7 @@ fn decode_base64_simple(input: &str) -> Result<String, ()> {
         for (i, &byte) in chunk.iter().enumerate() {
             values[i] = match ALPHABET.iter().position(|&x| x == byte) {
                 Some(pos) => pos as u8,
-                None => return Err(()),
+                Option::None => return Err(()),
             };
         }
 
