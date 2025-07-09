@@ -1,9 +1,13 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tempfile::NamedTempFile;
 use tracing::{info, warn};
+use zip::write::FileOptions;
+use zip::ZipWriter;
 
 use crate::domain::{AcmiFileRepository, AcmiRepository};
 
@@ -19,6 +23,7 @@ pub struct FileAcmiRepository {
 struct FileAcmiState {
     filename: Option<PathBuf>,
     is_recording: bool,
+    temp_file: Option<NamedTempFile>,
 }
 
 impl FileAcmiRepository {
@@ -28,6 +33,7 @@ impl FileAcmiRepository {
             state: Arc::new(Mutex::new(FileAcmiState {
                 filename: None,
                 is_recording: false,
+                temp_file: None,
             })),
         }
     }
@@ -56,7 +62,7 @@ impl FileAcmiRepository {
             .unwrap()
             .as_secs();
 
-        let filename = format!("Stormworks-{}.txt.acmi", now);
+        let filename = format!("Stormworks-{}.zip.acmi", now);
         PathBuf::from(filename)
     }
 }
@@ -70,29 +76,18 @@ impl Default for FileAcmiRepository {
 #[async_trait]
 impl AcmiRepository for FileAcmiRepository {
     async fn write(&self, acmi: &str) -> Result<()> {
-        let filename = {
-            let state = self.state.lock().unwrap();
-            state.filename.clone()
-        };
+        let mut state = self.state.lock().unwrap();
 
-        if let Some(filename) = filename {
-            use tokio::fs::OpenOptions;
-            use tokio::io::AsyncWriteExt;
-
-            let mut file = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&filename)
-                .await
-                .with_context(|| format!("Failed to open ACMI file: {:?}", filename))?;
-
-            file.write_all(acmi.as_bytes())
-                .await
-                .with_context(|| format!("Failed to write to ACMI file: {:?}", filename))?;
-
-            file.flush()
-                .await
-                .with_context(|| format!("Failed to flush ACMI file: {:?}", filename))?;
+        if state.is_recording {
+            if let Some(ref mut temp_file) = state.temp_file {
+                use std::io::Write;
+                temp_file
+                    .write_all(acmi.as_bytes())
+                    .with_context(|| "Failed to write to temporary ACMI file")?;
+                temp_file
+                    .flush()
+                    .with_context(|| "Failed to flush temporary ACMI file")?;
+            }
         }
 
         Ok(())
@@ -112,16 +107,26 @@ impl AcmiFileRepository for FileAcmiRepository {
         if state.is_recording {
             warn!("Stopping existing recording before starting new one");
             state.is_recording = false;
+            state.temp_file = None;
         }
 
         let filename = Self::generate_filename();
         let header = Self::generate_acmi_header();
 
-        // Write header to file synchronously since we're in a sync function
-        std::fs::write(&filename, header)
-            .with_context(|| format!("Failed to create ACMI file: {:?}", filename))?;
+        // Create temporary file and write header
+        let mut temp_file =
+            NamedTempFile::new().with_context(|| "Failed to create temporary ACMI file")?;
+
+        use std::io::Write;
+        temp_file
+            .write_all(header.as_bytes())
+            .with_context(|| "Failed to write header to temporary ACMI file")?;
+        temp_file
+            .flush()
+            .with_context(|| "Failed to flush temporary ACMI file")?;
 
         state.filename = Some(filename.clone());
+        state.temp_file = Some(temp_file);
         state.is_recording = true;
 
         info!("Started ACMI recording: {:?}", filename);
@@ -130,19 +135,58 @@ impl AcmiFileRepository for FileAcmiRepository {
     }
 
     async fn stop(&self) -> Result<()> {
-        let mut state = self.state.lock().unwrap();
+        let (filename, temp_file) = {
+            let mut state = self.state.lock().unwrap();
 
-        if !state.is_recording {
-            warn!("No active recording to stop");
-            return Ok(());
-        }
+            if !state.is_recording {
+                warn!("No active recording to stop");
+                return Ok(());
+            }
 
-        state.is_recording = false;
+            state.is_recording = false;
+            let filename = state.filename.take();
+            let temp_file = state.temp_file.take();
 
-        if let Some(filename) = state.filename.take() {
-            info!("Stopped ACMI recording: {:?}", filename);
+            (filename, temp_file)
+        };
+
+        if let (Some(filename), Some(temp_file)) = (filename, temp_file) {
+            // Create ZIP file and copy content from temporary file
+            let zip_file = std::fs::File::create(&filename)
+                .with_context(|| format!("Failed to create ZIP file: {:?}", filename))?;
+
+            let mut zip = ZipWriter::new(zip_file);
+            let options = FileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated)
+                .unix_permissions(0o755);
+
+            // Generate txt.acmi filename based on zip filename
+            let txt_filename = filename
+                .file_stem()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .replace(".zip", ".txt");
+            let txt_filename = format!("{}.acmi", txt_filename);
+
+            zip.start_file(&txt_filename, options)
+                .with_context(|| format!("Failed to start file in ZIP: {}", txt_filename))?;
+
+            // Copy content from temporary file to ZIP
+            let temp_path = temp_file.path();
+            let temp_content = std::fs::read(temp_path)
+                .with_context(|| format!("Failed to read temporary file: {:?}", temp_path))?;
+
+            zip.write_all(&temp_content)
+                .with_context(|| format!("Failed to write ACMI content to ZIP: {:?}", filename))?;
+
+            zip.finish()
+                .with_context(|| format!("Failed to finalize ZIP file: {:?}", filename))?;
+
+            // Temporary file is automatically deleted when dropped
+            info!("Stopped ACMI recording and saved ZIP: {:?}", filename);
         } else {
-            warn!("No filename to process when stopping recording");
+            warn!("No filename or temporary file to process when stopping recording");
         }
 
         Ok(())
