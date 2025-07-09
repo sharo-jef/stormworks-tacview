@@ -1,0 +1,26 @@
+[package]
+name = "stormworks-tacview"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.20", features = [
+    "rt-multi-thread",
+    "net",
+    "fs",
+    "io-util",
+    "time",
+    "macros",
+    "signal",
+    "sync",
+] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+async-trait = "0.1"
+futures = "0.3"
+bytes = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.0", features = ["derive"] }

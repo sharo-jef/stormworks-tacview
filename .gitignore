@@ -1,2 +1,25 @@
-*.exe
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# ACMI files
 *.acmi
+*.zip.acmi
+
+# Logs
+*.log
