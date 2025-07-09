@@ -29,12 +29,12 @@ impl AppConfig {
             Err(e) => {
                 warn!("Failed to load configuration: {}", e);
                 let config = Self::default();
-                
+
                 // Try to create default config file
                 if let Err(e) = Self::create_default_config_file(&config) {
                     warn!("Failed to create default configuration file: {}", e);
                 }
-                
+
                 config
             }
         }
@@ -43,9 +43,12 @@ impl AppConfig {
     /// Load configuration from the config file
     fn load_from_file() -> Result<Self> {
         let config_path = get_config_file_path()?;
-        
+
         if !config_path.exists() {
-            return Err(anyhow::anyhow!("Configuration file not found: {:?}", config_path));
+            return Err(anyhow::anyhow!(
+                "Configuration file not found: {:?}",
+                config_path
+            ));
         }
 
         let content = std::fs::read_to_string(&config_path)
@@ -60,7 +63,7 @@ impl AppConfig {
     /// Create default configuration file
     fn create_default_config_file(config: &AppConfig) -> Result<()> {
         let config_path = get_config_file_path()?;
-        
+
         // Create config directory if it doesn't exist
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent)
@@ -75,8 +78,12 @@ impl AppConfig {
         let yaml_content = serde_yaml::to_string(config)
             .with_context(|| "Failed to serialize default configuration")?;
 
-        std::fs::write(&config_path, yaml_content)
-            .with_context(|| format!("Failed to write default configuration file: {:?}", config_path))?;
+        std::fs::write(&config_path, yaml_content).with_context(|| {
+            format!(
+                "Failed to write default configuration file: {:?}",
+                config_path
+            )
+        })?;
 
         info!("Created default configuration file: {:?}", config_path);
         Ok(())
@@ -85,8 +92,9 @@ impl AppConfig {
     /// Ensure the output directory exists
     pub fn ensure_output_dir(&self) -> Result<()> {
         if !self.output_dir.exists() {
-            std::fs::create_dir_all(&self.output_dir)
-                .with_context(|| format!("Failed to create output directory: {:?}", self.output_dir))?;
+            std::fs::create_dir_all(&self.output_dir).with_context(|| {
+                format!("Failed to create output directory: {:?}", self.output_dir)
+            })?;
             info!("Created output directory: {:?}", self.output_dir);
         }
         Ok(())
@@ -96,13 +104,13 @@ impl AppConfig {
     pub fn generate_output_path(&self, base_filename: &str) -> PathBuf {
         let mut counter = 0;
         let mut filename = base_filename.to_string();
-        
+
         loop {
             let file_path = self.output_dir.join(&filename);
             if !file_path.exists() {
                 return file_path;
             }
-            
+
             counter += 1;
             // For compound extensions like .zip.acmi, handle them properly
             if base_filename.ends_with(".zip.acmi") {
@@ -123,7 +131,7 @@ impl AppConfig {
 fn get_config_file_path() -> Result<PathBuf> {
     let config_dir = dirs::config_dir()
         .ok_or_else(|| anyhow::anyhow!("Unable to determine config directory"))?;
-    
+
     Ok(config_dir.join("stormworks-tacview.yml"))
 }
 
@@ -142,7 +150,10 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = AppConfig::default();
-        assert!(config.output_dir.to_string_lossy().contains("StormworksTacview"));
+        assert!(config
+            .output_dir
+            .to_string_lossy()
+            .contains("StormworksTacview"));
     }
 
     #[test]

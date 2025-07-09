@@ -57,7 +57,7 @@ The application will start two servers:
 
 ## Configuration
 
-The application supports configuration via a YAML file located at `~/.config/stormworks-tacview.yml`. 
+The application supports configuration via a YAML file located at `~/.config/stormworks-tacview.yml`.
 
 ### Configuration File Format
 
