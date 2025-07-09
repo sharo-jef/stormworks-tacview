@@ -55,6 +55,27 @@ The application will start two servers:
 - **HTTP Server**: `localhost:3000` (for Stormworks communication)
 - **TCP Server**: `localhost:42674` (for Tacview connections)
 
+## Configuration
+
+The application supports configuration via a YAML file located at `~/.config/stormworks-tacview.yml`. 
+
+### Configuration File Format
+
+```yaml
+output_dir: C:\Users\username\Documents\StormworksTacview
+```
+
+### Configuration Options
+
+- `output_dir`: Directory where ACMI files will be saved (default: `~/Documents/StormworksTacview`)
+
+### Configuration Behavior
+
+- If the configuration file doesn't exist, the application will create one with default values
+- If the configuration file cannot be created, a warning will be logged and the application will continue with default settings
+- The output directory will be created automatically if it doesn't exist
+- If a file with the same name already exists, a counter will be added to avoid conflicts (e.g., `Stormworks-123.zip.acmi`, `Stormworks-123-1.zip.acmi`)
+
 ## Usage
 
 ### ACMI File Export
@@ -77,12 +98,26 @@ The application will start two servers:
 
 ## Configuration
 
-Currently, the application uses default configuration:
+Currently, the application supports configuration via a YAML file located at `~/.config/stormworks-tacview.yml`:
 
-- HTTP Port: 3000
-- TCP Port: 42674
+### Configuration File Format
 
-Configuration can be extended by modifying the `Config` struct in `src/main.rs`.
+```yaml
+output_dir: C:\Users\username\Documents\StormworksTacview
+```
+
+### Configuration Options
+
+- `output_dir`: Directory where ACMI files will be saved (default: `~/Documents/StormworksTacview`)
+
+### Configuration Behavior
+
+- If the configuration file doesn't exist, the application will create one with default values
+- If the configuration file cannot be created, a warning will be logged and the application will continue with default settings
+- The output directory will be created automatically if it doesn't exist
+- If a file with the same name already exists, a counter will be added to avoid conflicts (e.g., `Stormworks-123.zip.acmi`, `Stormworks-123-1.zip.acmi`)
+
+Command line options can still be used to override HTTP and TCP port settings.
 
 ## API Endpoints
 

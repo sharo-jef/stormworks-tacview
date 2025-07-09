@@ -1,9 +1,9 @@
 use anyhow::Result;
 use clap::Parser;
 use std::sync::Arc;
-use stormworks_tacview::{AppState, FileAcmiRepository, HttpServer, TcpServer};
+use stormworks_tacview::{AppConfig, AppState, FileAcmiRepository, HttpServer, TcpServer};
 use stormworks_tacview::domain::AcmiRepository;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Stormworks-Tacview Bridge
@@ -60,10 +60,18 @@ fn init_logging(verbose: bool) {
 
 /// Initialize application state with default repositories
 async fn init_app_state(verbose: bool) -> Arc<AppState> {
+    // Load configuration
+    let config = AppConfig::load();
+    
+    // Ensure output directory exists
+    if let Err(e) = config.ensure_output_dir() {
+        warn!("Failed to ensure output directory: {}", e);
+    }
+    
     let state = Arc::new(AppState::new_with_verbose(verbose));
     
-    // Add file-based ACMI repository
-    let file_repo = Arc::new(FileAcmiRepository::new());
+    // Add file-based ACMI repository with configuration
+    let file_repo = Arc::new(FileAcmiRepository::new_with_config(config));
     {
         let mut file_repos = state.file_repositories.lock().await;
         file_repos.push(file_repo.clone());

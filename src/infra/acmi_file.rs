@@ -9,6 +9,7 @@ use tracing::{info, warn};
 use zip::write::FileOptions;
 use zip::ZipWriter;
 
+use crate::config::AppConfig;
 use crate::domain::{AcmiFileRepository, AcmiRepository};
 
 /// File-based ACMI repository implementation
@@ -17,6 +18,7 @@ use crate::domain::{AcmiFileRepository, AcmiRepository};
 /// for starting/stopping recordings.
 pub struct FileAcmiRepository {
     state: Arc<Mutex<FileAcmiState>>,
+    config: AppConfig,
 }
 
 #[derive(Debug)]
@@ -27,14 +29,20 @@ struct FileAcmiState {
 }
 
 impl FileAcmiRepository {
-    /// Create a new file-based ACMI repository
+    /// Create a new file-based ACMI repository with default configuration
     pub fn new() -> Self {
+        Self::new_with_config(AppConfig::default())
+    }
+    
+    /// Create a new file-based ACMI repository with custom configuration
+    pub fn new_with_config(config: AppConfig) -> Self {
         Self {
             state: Arc::new(Mutex::new(FileAcmiState {
                 filename: None,
                 is_recording: false,
                 temp_file: None,
             })),
+            config,
         }
     }
 
@@ -56,14 +64,14 @@ impl FileAcmiRepository {
     }
 
     /// Generate filename based on current timestamp
-    fn generate_filename() -> PathBuf {
+    fn generate_filename(&self) -> PathBuf {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
-        let filename = format!("Stormworks-{}.zip.acmi", now);
-        PathBuf::from(filename)
+        let base_filename = format!("Stormworks-{}.zip.acmi", now);
+        self.config.generate_output_path(&base_filename)
     }
 }
 
@@ -110,7 +118,12 @@ impl AcmiFileRepository for FileAcmiRepository {
             state.temp_file = None;
         }
 
-        let filename = Self::generate_filename();
+        // Ensure output directory exists
+        if let Err(e) = self.config.ensure_output_dir() {
+            warn!("Failed to ensure output directory: {}", e);
+        }
+
+        let filename = self.generate_filename();
         let header = Self::generate_acmi_header();
 
         // Create temporary file and write header
