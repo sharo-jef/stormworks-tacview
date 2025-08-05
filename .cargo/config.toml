@@ -1,0 +1,6 @@
+[build]
+rustflags = ["-D", "warnings"]
+
+[alias]
+ci = "run --quiet --package ci --"
+lua-test = "run --quiet --package lua-test --"

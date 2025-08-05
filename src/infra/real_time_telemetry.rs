@@ -48,8 +48,8 @@ impl TcpRealTimeTelemetryRepository {
         format!(
             "FileType=text/acmi/tacview\n\
             FileVersion=2.2\n\
-            0,ReferenceTime={}\n\
-            0,RecordingTime={}\n\
+            0,ReferenceTime={time_str}\n\
+            0,RecordingTime={time_str}\n\
             0,Title=StormworksACMI\n\
             0,DataRecorder=StormworksACMI 0.1.0\n\
             0,DataSource=Stormworks\n\
@@ -57,8 +57,7 @@ impl TcpRealTimeTelemetryRepository {
             0,ReferenceLongitude=180\n\
             0,ReferenceLatitude=0\n\
             40000003,T=0|0|2000|0|0,Type=Navaid+Static+Bullseye,Color=Blue,Coalition=Allies\n\
-            #0.001\n",
-            time_str, time_str
+            #0.001\n"
         )
     }
 

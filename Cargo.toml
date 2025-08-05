@@ -36,3 +36,6 @@ base64 = "0.21"
 hyper = { version = "0.14", features = ["server", "http1"] }
 
 [dev-dependencies]
+
+[workspace]
+members = [".", "ci"]

@@ -1,5 +1,5 @@
 //! Infrastructure layer for ACMI repositories
-//! 
+//!
 //! This module contains concrete implementations of the ACMI repository traits
 //! for file-based storage and real-time telemetry streaming.
 

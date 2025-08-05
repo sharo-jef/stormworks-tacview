@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::NamedTempFile;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use zip::write::FileOptions;
 use zip::ZipWriter;
 
@@ -28,12 +28,34 @@ struct FileAcmiState {
     temp_file: Option<NamedTempFile>,
 }
 
+impl Drop for FileAcmiRepository {
+    fn drop(&mut self) {
+        // Try to save any active recording when the repository is dropped
+        let mut state = self.state.lock().unwrap();
+        if state.is_recording {
+            warn!("FileAcmiRepository dropped with active recording, attempting to save...");
+
+            state.is_recording = false;
+            let filename = state.filename.take();
+            let temp_file = state.temp_file.take();
+
+            if let (Some(filename), Some(temp_file)) = (filename, temp_file) {
+                // Attempt to save the file
+                match self.save_acmi_file(&filename, temp_file) {
+                    Ok(_) => info!("Successfully saved ACMI file during drop: {:?}", filename),
+                    Err(e) => error!("Failed to save ACMI file during drop: {}", e),
+                }
+            }
+        }
+    }
+}
+
 impl FileAcmiRepository {
     /// Create a new file-based ACMI repository with default configuration
     pub fn new() -> Self {
         Self::new_with_config(AppConfig::default())
     }
-    
+
     /// Create a new file-based ACMI repository with custom configuration
     pub fn new_with_config(config: AppConfig) -> Self {
         Self {
@@ -48,8 +70,7 @@ impl FileAcmiRepository {
 
     /// Generate ACMI file header with metadata
     fn generate_acmi_header() -> String {
-        format!(
-            "FileType=text/acmi/tacview\n\
+        "FileType=text/acmi/tacview\n\
             FileVersion=2.2\n\
             0,ReferenceTime=2023-01-01T00:00:00.000Z\n\
             0,RecordingTime=2023-01-01T00:00:00.000Z\n\
@@ -60,7 +81,46 @@ impl FileAcmiRepository {
             0,ReferenceLongitude=180\n\
             0,ReferenceLatitude=0\n\
             40000003,T=0|0|2000|0|0,Type=Navaid+Static+Bullseye,Color=Blue,Coalition=Allies\n"
-        )
+            .to_string()
+    }
+
+    /// Save ACMI data from temporary file to ZIP file
+    fn save_acmi_file(&self, filename: &PathBuf, temp_file: NamedTempFile) -> Result<()> {
+        // Create ZIP file and copy content from temporary file
+        let zip_file = std::fs::File::create(filename)
+            .with_context(|| format!("Failed to create ZIP file: {filename:?}"))?;
+
+        let mut zip = ZipWriter::new(zip_file);
+        let options = FileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated)
+            .unix_permissions(0o755);
+
+        // Generate txt.acmi filename based on zip filename
+        let txt_filename = filename
+            .file_stem()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .replace(".zip", ".txt");
+        let txt_filename = format!("{txt_filename}.acmi");
+
+        zip.start_file(&txt_filename, options)
+            .with_context(|| format!("Failed to start file in ZIP: {txt_filename}"))?;
+
+        // Copy content from temporary file to ZIP
+        let temp_path = temp_file.path();
+        let temp_content = std::fs::read(temp_path)
+            .with_context(|| format!("Failed to read temporary file: {temp_path:?}"))?;
+
+        zip.write_all(&temp_content)
+            .with_context(|| format!("Failed to write ACMI content to ZIP: {filename:?}"))?;
+
+        zip.finish()
+            .with_context(|| format!("Failed to finalize ZIP file: {filename:?}"))?;
+
+        // Temporary file is automatically deleted when dropped
+        info!("Saved ACMI file: {:?}", filename);
+        Ok(())
     }
 
     /// Generate filename based on current timestamp
@@ -70,7 +130,7 @@ impl FileAcmiRepository {
             .unwrap()
             .as_secs();
 
-        let base_filename = format!("Stormworks-{}.zip.acmi", now);
+        let base_filename = format!("Stormworks-{now}.zip.acmi");
         self.config.generate_output_path(&base_filename)
     }
 }
@@ -164,39 +224,7 @@ impl AcmiFileRepository for FileAcmiRepository {
         };
 
         if let (Some(filename), Some(temp_file)) = (filename, temp_file) {
-            // Create ZIP file and copy content from temporary file
-            let zip_file = std::fs::File::create(&filename)
-                .with_context(|| format!("Failed to create ZIP file: {:?}", filename))?;
-
-            let mut zip = ZipWriter::new(zip_file);
-            let options = FileOptions::default()
-                .compression_method(zip::CompressionMethod::Deflated)
-                .unix_permissions(0o755);
-
-            // Generate txt.acmi filename based on zip filename
-            let txt_filename = filename
-                .file_stem()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .replace(".zip", ".txt");
-            let txt_filename = format!("{}.acmi", txt_filename);
-
-            zip.start_file(&txt_filename, options)
-                .with_context(|| format!("Failed to start file in ZIP: {}", txt_filename))?;
-
-            // Copy content from temporary file to ZIP
-            let temp_path = temp_file.path();
-            let temp_content = std::fs::read(temp_path)
-                .with_context(|| format!("Failed to read temporary file: {:?}", temp_path))?;
-
-            zip.write_all(&temp_content)
-                .with_context(|| format!("Failed to write ACMI content to ZIP: {:?}", filename))?;
-
-            zip.finish()
-                .with_context(|| format!("Failed to finalize ZIP file: {:?}", filename))?;
-
-            // Temporary file is automatically deleted when dropped
+            self.save_acmi_file(&filename, temp_file)?;
             info!("Stopped ACMI recording and saved ZIP: {:?}", filename);
         } else {
             warn!("No filename or temporary file to process when stopping recording");

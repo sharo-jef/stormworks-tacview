@@ -23,7 +23,7 @@ impl TcpServer {
 
     /// Start the TCP server
     pub async fn start(&self, port: u16) -> Result<()> {
-        let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
+        let listener = TcpListener::bind(format!("0.0.0.0:{port}")).await?;
         info!("TCP server listening on port {}", port);
 
         loop {
@@ -47,7 +47,10 @@ impl TcpServer {
 
     /// Handle a single TCP connection
     async fn handle_connection(stream: tokio::net::TcpStream, state: Arc<AppState>) -> Result<()> {
-        let repo = Arc::new(TcpRealTimeTelemetryRepository::new_with_verbose(stream, state.verbose));
+        let repo = Arc::new(TcpRealTimeTelemetryRepository::new_with_verbose(
+            stream,
+            state.verbose,
+        ));
 
         // Perform handshake
         if state.verbose {

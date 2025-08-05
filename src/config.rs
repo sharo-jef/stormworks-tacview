@@ -52,10 +52,10 @@ impl AppConfig {
         }
 
         let content = std::fs::read_to_string(&config_path)
-            .with_context(|| format!("Failed to read configuration file: {:?}", config_path))?;
+            .with_context(|| format!("Failed to read configuration file: {config_path:?}"))?;
 
         let config: AppConfig = serde_yaml::from_str(&content)
-            .with_context(|| format!("Failed to parse configuration file: {:?}", config_path))?;
+            .with_context(|| format!("Failed to parse configuration file: {config_path:?}"))?;
 
         Ok(config)
     }
@@ -67,7 +67,7 @@ impl AppConfig {
         // Create config directory if it doesn't exist
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create config directory: {:?}", parent))?;
+                .with_context(|| format!("Failed to create config directory: {parent:?}"))?;
         }
 
         // Don't overwrite existing file
@@ -79,10 +79,7 @@ impl AppConfig {
             .with_context(|| "Failed to serialize default configuration")?;
 
         std::fs::write(&config_path, yaml_content).with_context(|| {
-            format!(
-                "Failed to write default configuration file: {:?}",
-                config_path
-            )
+            format!("Failed to write default configuration file: {config_path:?}")
         })?;
 
         info!("Created default configuration file: {:?}", config_path);
@@ -113,15 +110,14 @@ impl AppConfig {
 
             counter += 1;
             // For compound extensions like .zip.acmi, handle them properly
-            if base_filename.ends_with(".zip.acmi") {
-                let name = &base_filename[..base_filename.len() - 9]; // Remove ".zip.acmi"
-                filename = format!("{}-{}.zip.acmi", name, counter);
+            if let Some(name) = base_filename.strip_suffix(".zip.acmi") {
+                filename = format!("{name}-{counter}.zip.acmi");
             } else if let Some(dot_pos) = base_filename.rfind('.') {
                 let name = &base_filename[..dot_pos];
                 let ext = &base_filename[dot_pos..];
-                filename = format!("{}-{}{}", name, counter, ext);
+                filename = format!("{name}-{counter}{ext}");
             } else {
-                filename = format!("{}-{}", base_filename, counter);
+                filename = format!("{base_filename}-{counter}");
             }
         }
     }

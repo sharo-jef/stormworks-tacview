@@ -1,5 +1,5 @@
 //! Server implementations for HTTP and TCP
-//! 
+//!
 //! This module contains server implementations for handling HTTP requests
 //! from Stormworks and TCP connections from Tacview.
 

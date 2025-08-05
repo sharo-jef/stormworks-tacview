@@ -1,8 +1,8 @@
 use anyhow::Result;
 use clap::Parser;
 use std::sync::Arc;
+use stormworks_tacview::domain::{AcmiFileRepository, AcmiRepository};
 use stormworks_tacview::{AppConfig, AppState, FileAcmiRepository, HttpServer, TcpServer};
-use stormworks_tacview::domain::AcmiRepository;
 use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -13,11 +13,11 @@ struct Args {
     /// Enable verbose debug logging
     #[arg(short, long)]
     verbose: bool,
-    
+
     /// HTTP server port (default: 3000)
     #[arg(long, default_value_t = 3000)]
     http_port: u16,
-    
+
     /// TCP server port (default: 42674)
     #[arg(long, default_value_t = 42674)]
     tcp_port: u16,
@@ -48,11 +48,10 @@ fn init_logging(verbose: bool) {
     } else {
         "stormworks_tacview=info"
     };
-    
+
     tracing_subscriber::registry()
         .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| filter.into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| filter.into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -62,26 +61,26 @@ fn init_logging(verbose: bool) {
 async fn init_app_state(verbose: bool) -> Arc<AppState> {
     // Load configuration
     let config = AppConfig::load();
-    
+
     // Ensure output directory exists
     if let Err(e) = config.ensure_output_dir() {
         warn!("Failed to ensure output directory: {}", e);
     }
-    
+
     let state = Arc::new(AppState::new_with_verbose(verbose));
-    
+
     // Add file-based ACMI repository with configuration
     let file_repo = Arc::new(FileAcmiRepository::new_with_config(config));
     {
         let mut file_repos = state.file_repositories.lock().await;
         file_repos.push(file_repo.clone());
     }
-    
+
     {
         let mut acmi_repos = state.acmi_repositories.lock().await;
         acmi_repos.push(file_repo as Arc<dyn AcmiRepository>);
     }
-    
+
     state
 }
 
@@ -91,22 +90,25 @@ async fn main() -> Result<()> {
     // Parse command line arguments
     let args = Args::parse();
     let config = Config::from(args);
-    
+
     // Initialize logging
     init_logging(config.verbose);
-    
-    info!("Starting Stormworks-Tacview Bridge v{}", env!("CARGO_PKG_VERSION"));
+
+    info!(
+        "Starting Stormworks-Tacview Bridge v{}",
+        env!("CARGO_PKG_VERSION")
+    );
     if config.verbose {
         info!("Verbose logging enabled");
     }
-    
+
     // Initialize application state
     let state = init_app_state(config.verbose).await;
-    
+
     // Create servers
     let http_server = HttpServer::new(state.clone());
     let tcp_server = TcpServer::new(state.clone());
-    
+
     // Start servers concurrently
     let http_handle = {
         let http_server = http_server;
@@ -116,7 +118,7 @@ async fn main() -> Result<()> {
             }
         })
     };
-    
+
     let tcp_handle = {
         let tcp_server = tcp_server;
         tokio::spawn(async move {
@@ -125,14 +127,14 @@ async fn main() -> Result<()> {
             }
         })
     };
-    
+
     // Handle graceful shutdown
     let shutdown_signal = async {
         tokio::signal::ctrl_c()
             .await
             .expect("Failed to install CTRL+C signal handler");
     };
-    
+
     tokio::select! {
         _ = shutdown_signal => {
             info!("Received shutdown signal, stopping servers...");
@@ -144,7 +146,22 @@ async fn main() -> Result<()> {
             error!("TCP server terminated unexpectedly");
         }
     }
-    
+
+    // Gracefully stop all active ACMI recordings before exit
+    info!("Stopping active ACMI recordings...");
+    {
+        let file_repos = state.file_repositories.lock().await;
+        for repo in file_repos.iter() {
+            if repo.is_recording() {
+                if let Err(e) = repo.stop().await {
+                    error!("Failed to stop ACMI recording: {}", e);
+                } else {
+                    info!("Successfully stopped ACMI recording");
+                }
+            }
+        }
+    }
+
     info!("Stormworks-Tacview Bridge stopped");
     Ok(())
 }

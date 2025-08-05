@@ -1,5 +1,5 @@
 //! Domain layer for ACMI repositories
-//! 
+//!
 //! This module contains the core traits and types that define the behavior
 //! of ACMI data repositories in the Stormworks-Tacview bridge.
 

@@ -18,7 +18,7 @@ impl HttpServer {
     }
 
     pub async fn start(&self, port: u16) -> Result<()> {
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).await?;
+        let listener = TcpListener::bind(format!("127.0.0.1:{port}")).await?;
         info!("HTTP server listening on port {}", port);
 
         loop {
@@ -36,7 +36,6 @@ impl HttpServer {
                         if state_clone.verbose {
                             info!("HTTP connection closed by client: {}", addr);
                         }
-                        return;
                     }
                     Ok(n) => {
                         let request = String::from_utf8_lossy(&buffer[..n]);
@@ -131,7 +130,7 @@ async fn handle_acmi(state: &AppState, data: &str) -> String {
         }
     };
 
-    let acmi_data = format!("{}\n", decoded);
+    let acmi_data = format!("{decoded}\n");
 
     // Write to all repositories
     let repos = state.acmi_repositories.lock().await;
