@@ -60,9 +60,21 @@ jobs:
           esac
 
           new_tag="v${major}.${minor}.${patch}"
+          new_version="${major}.${minor}.${patch}"
 
           echo "latest=$latest_tag" >> "$GITHUB_OUTPUT"
           echo "tag=$new_tag" >> "$GITHUB_OUTPUT"
+          echo "version=$new_version" >> "$GITHUB_OUTPUT"
+
+      - name: Update Cargo.toml version
+        run: |
+          sed -i '0,/^version = ".*"$/s//version = "${{ steps.version.outputs.version }}"/' Cargo.toml
+
+      - name: Commit version bump
+        run: |
+          git add Cargo.toml
+          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+          git push origin HEAD:${{ github.ref }}
 
       - name: Create annotated tag
         run: |
