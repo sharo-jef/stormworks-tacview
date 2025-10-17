@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g., v0.0.1). Leave empty to use the latest tag."
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -12,9 +18,34 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  determine-tag:
+    name: Determine release tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine tag
+        id: tag
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            latest_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1)"
+            echo "tag=$latest_tag" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: Build ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
+    needs: determine-tag
     strategy:
       matrix:
         include:
@@ -31,11 +62,12 @@ jobs:
             archive_suffix: windows-x86_64.zip
             binary_name: stormworks-tacview.exe
     env:
-      ASSET_PREFIX: stormworks-tacview-${{ github.ref_name }}
+      ASSET_PREFIX: stormworks-tacview-${{ needs.determine-tag.outputs.tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.determine-tag.outputs.tag }}
           submodules: false
 
       - name: Setup Rust
@@ -77,7 +109,7 @@ jobs:
 
   publish:
     name: Publish Release
-    needs: build
+    needs: [determine-tag, build]
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
@@ -91,6 +123,7 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ needs.determine-tag.outputs.tag }}
           files: dist/**/*
           draft: false
           prerelease: false
