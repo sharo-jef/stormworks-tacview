@@ -46,8 +46,7 @@ impl AppConfig {
 
         if !config_path.exists() {
             return Err(anyhow::anyhow!(
-                "Configuration file not found: {:?}",
-                config_path
+                "Configuration file not found: {config_path:?}"
             ));
         }
 
