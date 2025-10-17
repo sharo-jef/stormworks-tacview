@@ -24,7 +24,7 @@ The application follows clean architecture principles with clear separation of c
 ## Requirements
 
 - [Rust](https://rustup.rs/) 1.70 or later
-- [WebMap](https://steamcommunity.com/sharedfiles/filedetails/?id=3132180760) Stormworks addon
+- [Tacview](https://steamcommunity.com/sharedfiles/filedetails/?id=3413525176) Stormworks addon
 
 ## Building
 
