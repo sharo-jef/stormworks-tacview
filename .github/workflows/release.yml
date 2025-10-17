@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x86_64
+            archive_suffix: linux-x86_64.tar.gz
+            binary_name: stormworks-tacview
+          - os: macos-latest
+            label: macos-x86_64
+            archive_suffix: macos-x86_64.tar.gz
+            binary_name: stormworks-tacview
+          - os: windows-latest
+            label: windows-x86_64
+            archive_suffix: windows-x86_64.zip
+            binary_name: stormworks-tacview.exe
+    env:
+      ASSET_PREFIX: stormworks-tacview-${{ github.ref_name }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Package binary (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin_path="target/release/${{ matrix.binary_name }}"
+          # Strip binaries on Unix targets to reduce artifact size when possible.
+          strip "$bin_path" 2>/dev/null || true
+          archive_name="${ASSET_PREFIX}-${{ matrix.archive_suffix }}"
+          tar -C target/release -czf "$archive_name" "${{ matrix.binary_name }}"
+          echo "asset=$archive_name" >> "$GITHUB_OUTPUT"
+        id: package_unix
+
+      - name: Package binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archiveName = "$env:ASSET_PREFIX-${{ matrix.archive_suffix }}"
+          $binaryPath = "target/release/${{ matrix.binary_name }}"
+          Compress-Archive -Path $binaryPath -DestinationPath $archiveName -Force
+          "asset=$archiveName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        id: package_windows
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.label }}
+          path: ${{ steps.package_unix.outputs.asset || steps.package_windows.outputs.asset }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Display downloaded files
+        run: ls -R dist
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/**/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
